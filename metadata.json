@@ -1,0 +1,6 @@
+{
+  "name": "Forex Candlestick Trainer",
+  "description": "Interaktiver Forex-Kerzenchart-Simulator & Trading-Trainer auf Deutsch mit historischem Replay, automatischer Mustererkennung, Indikatoren und risikofreiem Spielgeld-Konto.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

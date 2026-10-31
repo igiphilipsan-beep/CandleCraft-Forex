@@ -1,0 +1,72 @@
+import { ForexPairInfo, ForexSymbol, Timeframe } from '../types/forex';
+
+export const FOREX_PAIRS: Record<ForexSymbol, ForexPairInfo> = {
+  'EURUSD=X': {
+    symbol: 'EURUSD=X',
+    name: 'EUR / USD',
+    base: 'EUR',
+    quote: 'USD',
+    pipFactor: 0.0001,
+    decimals: 5,
+    defaultSpreadPips: 1.2,
+    description: 'Euro gegen US-Dollar – Das meistgehandelte Währungspaar der Welt mit hoher Liquidität.',
+  },
+  'GBPUSD=X': {
+    symbol: 'GBPUSD=X',
+    name: 'GBP / USD',
+    base: 'GBP',
+    quote: 'USD',
+    pipFactor: 0.0001,
+    decimals: 5,
+    defaultSpreadPips: 1.6,
+    description: 'Britisches Pfund gegen US-Dollar (bekannt als "Cable") – Sehr volatil mit kräftigen Kerzen-Impulsen.',
+  },
+  'USDJPY=X': {
+    symbol: 'USDJPY=X',
+    name: 'USD / JPY',
+    base: 'USD',
+    quote: 'JPY',
+    pipFactor: 0.01,
+    decimals: 3,
+    defaultSpreadPips: 1.3,
+    description: 'US-Dollar gegen Japanischen Yen – Stark beeinflusst von Zinsdifferenzen und Risikostimmung.',
+  },
+  'AUDUSD=X': {
+    symbol: 'AUDUSD=X',
+    name: 'AUD / USD',
+    base: 'AUD',
+    quote: 'USD',
+    pipFactor: 0.0001,
+    decimals: 5,
+    defaultSpreadPips: 1.4,
+    description: 'Australischer Dollar gegen US-Dollar ("Aussie") – Rohstoffwährung mit starker Asien-Pazifik-Dynamik.',
+  },
+  'USDCHF=X': {
+    symbol: 'USDCHF=X',
+    name: 'USD / CHF',
+    base: 'USD',
+    quote: 'CHF',
+    pipFactor: 0.0001,
+    decimals: 5,
+    defaultSpreadPips: 1.5,
+    description: 'US-Dollar gegen Schweizer Franken ("Swissy") – Klassischer sicherer Hafen bei Marktunsicherheiten.',
+  },
+  'EURGBP=X': {
+    symbol: 'EURGBP=X',
+    name: 'EUR / GBP',
+    base: 'EUR',
+    quote: 'GBP',
+    pipFactor: 0.0001,
+    decimals: 5,
+    defaultSpreadPips: 1.8,
+    description: 'Euro gegen Britisches Pfund – Wichtiges europäisches Cross-Pair mit oft sauberen Trendkanälen.',
+  },
+};
+
+export const TIMEFRAMES: { id: Timeframe; label: string; subLabel: string; candleSeconds: number }[] = [
+  { id: '1m', label: '1 Min', subLabel: 'Scalping', candleSeconds: 60 },
+  { id: '15m', label: '15 Min', subLabel: 'Daytrading', candleSeconds: 900 },
+  { id: '1h', label: '1 Std', subLabel: 'Intraday', candleSeconds: 3600 },
+  { id: '4h', label: '4 Std', subLabel: 'Swing-Trading', candleSeconds: 14400 },
+  { id: '1d', label: '1 Tag', subLabel: 'Positionstrading', candleSeconds: 86400 },
+];
