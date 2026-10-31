@@ -244,16 +244,16 @@ export default function App() {
     if (closedThisStep.length > 0) {
       setBalance((prev) => {
         const newBal = Number((prev + balanceDelta).toFixed(2));
-        setEquityHistory((hist) => [
-          ...hist,
-          {
-            time: Date.now(),
-            equity: newBal,
-            label: `Trade (${closedThisStep[0].symbol.replace('=X', '')})`,
-          },
-        ]);
         return newBal;
       });
+      setEquityHistory((hist) => [
+        ...hist,
+        {
+          time: Date.now(),
+          equity: Number((balance + balanceDelta).toFixed(2)),
+          label: `Trade (${closedThisStep[0].symbol.replace('=X', '')})`,
+        },
+      ]);
       setTradeHistory((prev) => [...prev, ...closedThisStep]);
     }
 
@@ -388,16 +388,17 @@ export default function App() {
 
     setBalance((prev) => {
       const newBal = Number((prev + pnlEur).toFixed(2));
-      setEquityHistory((hist) => [
-        ...hist,
-        {
-          time: Date.now(),
-          equity: newBal,
-          label: `Manuell (${order.symbol.replace('=X', '')})`,
-        },
-      ]);
       return newBal;
     });
+
+    setEquityHistory((hist) => [
+      ...hist,
+      {
+        time: Date.now(),
+        equity: Number((balance + pnlEur).toFixed(2)),
+        label: `Manuell (${order.symbol.replace('=X', '')})`,
+      },
+    ]);
 
     setTradeHistory((prev) => [
       ...prev,

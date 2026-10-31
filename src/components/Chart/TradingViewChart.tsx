@@ -15,8 +15,9 @@ import {
   LineSeries,
   createSeriesMarkers,
   ISeriesMarkersPluginApi,
+  LogicalRange,
 } from 'lightweight-charts';
-import { ArrowUp, ArrowDown, HelpCircle, Info, ChevronRight, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, BarChart2, ChevronRight, X } from 'lucide-react';
 import { Candle, DetectedPattern, ForexSymbol, TradeOrder } from '../../types/forex';
 import { calculateSMA, calculateRSI } from '../../utils/indicators';
 import { formatPrice } from '../../utils/calculations';
@@ -49,9 +50,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   height = 520,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
 
   const chartRef = useRef<IChartApi | null>(null);
+  const volumeChartRef = useRef<IChartApi | null>(null);
   const rsiChartRef = useRef<IChartApi | null>(null);
 
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -74,12 +77,20 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const priceDecimals = isJpy ? 3 : 5;
   const priceMinMove = isJpy ? 0.001 : 0.00001;
 
-  // Initialize main chart
+  // Calculate main chart height dynamically (accounting for volume and rsi panes)
+  let mainChartHeight = height;
+  if (indicators.volume && indicators.rsi) {
+    mainChartHeight = height - 210;
+  } else if (indicators.volume || indicators.rsi) {
+    mainChartHeight = height - 110;
+  }
+
+  // 1. Initialize main candlestick chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      height: indicators.rsi ? height - 130 : height,
+      height: mainChartHeight,
       layout: {
         background: { type: ColorType.Solid, color: '#090d16' },
         textColor: '#94a3b8',
@@ -113,7 +124,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         autoScale: true,
         scaleMargins: {
           top: 0.1,
-          bottom: indicators.volume ? 0.22 : 0.1,
+          bottom: 0.1,
         },
       },
       timeScale: {
@@ -134,21 +145,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         type: 'price',
         precision: priceDecimals,
         minMove: priceMinMove,
-      },
-    });
-
-    // Volume Series
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#334155',
-      priceFormat: {
-        type: 'volume',
-      },
-      priceScaleId: '', // overlay
-    });
-    volumeSeries.priceScale().applyOptions({
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0,
       },
     });
 
@@ -195,7 +191,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
-    volumeSeriesRef.current = volumeSeries;
     sma20SeriesRef.current = sma20Series;
     sma50SeriesRef.current = sma50Series;
     sma200SeriesRef.current = sma200Series;
@@ -208,7 +203,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         return;
       }
       const data = param.seriesData.get(candleSeries) as (CandlestickData & { volume?: number }) | undefined;
-      if (data) {
+      if (data && typeof data.open === 'number') {
         const timeNum = Number(param.time);
         const orig = candles.find((c) => c.time === timeNum);
         setHoveredCandle({
@@ -217,7 +212,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           high: data.high,
           low: data.low,
           close: data.close,
-          volume: orig?.volume ?? 0,
+          volume: orig?.volume ?? (data.volume || 0),
         });
 
         // Find if a pattern exists on this candle
@@ -251,9 +246,19 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
+      candleSeriesRef.current = null;
       markersPluginRef.current = null;
     };
   }, []);
+
+  // Update main chart height when indicators toggle
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        height: mainChartHeight,
+      });
+    }
+  }, [mainChartHeight]);
 
   // Update price scale precision when symbol changes
   useEffect(() => {
@@ -274,7 +279,79 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     });
   }, [symbol, priceDecimals, priceMinMove]);
 
-  // Initialize or update RSI sub-chart
+  // 2. REQUIREMENT 1: Dedicated Volume Sub-Chart pane under the candlestick chart (ca. 20% height, whole integer volume)
+  useEffect(() => {
+    if (!indicators.volume) {
+      if (volumeChartRef.current) {
+        volumeChartRef.current.remove();
+        volumeChartRef.current = null;
+        volumeSeriesRef.current = null;
+      }
+      return;
+    }
+
+    if (!volumeContainerRef.current) return;
+
+    if (!volumeChartRef.current) {
+      const volChart = createChart(volumeContainerRef.current, {
+        height: 100, // ca. 20% of overall height
+        layout: {
+          background: { type: ColorType.Solid, color: '#090d16' },
+          textColor: '#94a3b8',
+          fontSize: 10,
+          fontFamily: "'JetBrains Mono', monospace",
+        },
+        localization: {
+          priceFormatter: (v: number) => Math.round(v).toLocaleString('de-DE'),
+        },
+        grid: {
+          vertLines: { color: 'rgba(30, 41, 59, 0.45)' },
+          horzLines: { color: 'rgba(30, 41, 59, 0.45)' },
+        },
+        rightPriceScale: {
+          borderColor: '#1e293b',
+          scaleMargins: { top: 0.1, bottom: 0 },
+        },
+        timeScale: {
+          borderColor: '#1e293b',
+          timeVisible: true,
+          visible: !indicators.rsi, // show time axis on volume if RSI is not below it
+        },
+      });
+
+      // Volume as whole integer without decimal points
+      const volSeries = volChart.addSeries(HistogramSeries, {
+        color: '#38bdf8',
+        priceFormat: {
+          type: 'custom',
+          formatter: (v: number) => Math.round(v).toLocaleString('de-DE'),
+          minMove: 1,
+        },
+      });
+
+      volumeChartRef.current = volChart;
+      volumeSeriesRef.current = volSeries;
+
+      // Sync volume time scale with main chart
+      const syncHandler = (range: LogicalRange | null) => {
+        if (range && volumeChartRef.current) {
+          volumeChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      };
+      chartRef.current?.timeScale().subscribeVisibleLogicalRangeChange(syncHandler);
+
+      return () => {
+        chartRef.current?.timeScale().unsubscribeVisibleLogicalRangeChange(syncHandler);
+        if (volumeChartRef.current) {
+          volumeChartRef.current.remove();
+          volumeChartRef.current = null;
+          volumeSeriesRef.current = null;
+        }
+      };
+    }
+  }, [indicators.volume, indicators.rsi]);
+
+  // 3. Initialize or update RSI sub-chart
   useEffect(() => {
     if (!indicators.rsi) {
       if (rsiChartRef.current) {
@@ -289,7 +366,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     if (!rsiChartRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
-        height: 120,
+        height: 105,
         layout: {
           background: { type: ColorType.Solid, color: '#090d16' },
           textColor: '#94a3b8',
@@ -339,29 +416,42 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       rsiChartRef.current = rsiChart;
       rsiSeriesRef.current = rsiSeries;
 
-      // Sync time scale with main chart
-      chartRef.current?.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range) {
-          rsiChart.timeScale().setVisibleLogicalRange(range);
+      // Sync RSI time scale with main chart with unsubscribe cleanup
+      const rsiSyncHandler = (range: LogicalRange | null) => {
+        if (range && rsiChartRef.current) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
         }
-      });
-    }
+      };
+      chartRef.current?.timeScale().subscribeVisibleLogicalRangeChange(rsiSyncHandler);
 
-    return () => {
-      if (rsiChartRef.current) {
-        rsiChartRef.current.remove();
-        rsiChartRef.current = null;
-        rsiSeriesRef.current = null;
-      }
-    };
+      return () => {
+        chartRef.current?.timeScale().unsubscribeVisibleLogicalRangeChange(rsiSyncHandler);
+        if (rsiChartRef.current) {
+          rsiChartRef.current.remove();
+          rsiChartRef.current = null;
+          rsiSeriesRef.current = null;
+        }
+      };
+    }
   }, [indicators.rsi]);
 
   // Update chart data whenever candles change
   useEffect(() => {
     if (!candleSeriesRef.current || candles.length === 0) return;
 
+    // Filter out invalid items and ensure unique ascending timestamps
+    const cleanCandles: Candle[] = [];
+    const seenTimes = new Set<number>();
+    for (const c of candles) {
+      if (typeof c.time === 'number' && !seenTimes.has(c.time) && !isNaN(c.open) && !isNaN(c.close)) {
+        seenTimes.add(c.time);
+        cleanCandles.push(c);
+      }
+    }
+    cleanCandles.sort((a, b) => a.time - b.time);
+
     // Candlesticks
-    const candleData: CandlestickData[] = candles.map((c) => ({
+    const candleData: CandlestickData[] = cleanCandles.map((c) => ({
       time: c.time as UTCTimestamp,
       open: c.open,
       high: c.high,
@@ -370,24 +460,20 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }));
     candleSeriesRef.current.setData(candleData);
 
-    // Volume
-    if (volumeSeriesRef.current) {
-      if (indicators.volume) {
-        const volumeData = candles.map((c) => ({
-          time: c.time as UTCTimestamp,
-          value: c.volume,
-          color: c.close >= c.open ? 'rgba(34, 197, 94, 0.35)' : 'rgba(239, 68, 68, 0.35)',
-        }));
-        volumeSeriesRef.current.setData(volumeData);
-      } else {
-        volumeSeriesRef.current.setData([]);
-      }
+    // Dedicated Volume Sub-Chart Series
+    if (volumeSeriesRef.current && indicators.volume) {
+      const volumeData = cleanCandles.map((c) => ({
+        time: c.time as UTCTimestamp,
+        value: Math.round(c.volume || 1000), // Integer volume without decimals
+        color: c.close >= c.open ? 'rgba(34, 197, 94, 0.75)' : 'rgba(239, 68, 68, 0.75)',
+      }));
+      volumeSeriesRef.current.setData(volumeData);
     }
 
     // SMA 20
     if (sma20SeriesRef.current) {
       if (indicators.sma20) {
-        const sma20 = calculateSMA(candles, 20);
+        const sma20 = calculateSMA(cleanCandles, 20);
         sma20SeriesRef.current.setData(
           sma20.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
         );
@@ -399,7 +485,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     // SMA 50
     if (sma50SeriesRef.current) {
       if (indicators.sma50) {
-        const sma50 = calculateSMA(candles, 50);
+        const sma50 = calculateSMA(cleanCandles, 50);
         sma50SeriesRef.current.setData(
           sma50.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
         );
@@ -411,7 +497,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     // SMA 200
     if (sma200SeriesRef.current) {
       if (indicators.sma200) {
-        const sma200 = calculateSMA(candles, 200);
+        const sma200 = calculateSMA(cleanCandles, 200);
         sma200SeriesRef.current.setData(
           sma200.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
         );
@@ -422,36 +508,40 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     // RSI 14
     if (rsiSeriesRef.current && indicators.rsi) {
-      const rsiData = calculateRSI(candles, 14);
+      const rsiData = calculateRSI(cleanCandles, 14);
       rsiSeriesRef.current.setData(
         rsiData.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
       );
     }
 
-    // Pattern markers (REQUIREMENT 1 & 5: Clean icon-only markers without text, limited to last 30 candles)
+    // Pattern markers (Clean icon-only markers without text, limited to last 30 candles)
     if (markersPluginRef.current) {
       if (showPatterns && patterns.length > 0) {
-        // Filter to patterns within the last 30 visible candles
-        const recentCandles = candles.slice(-30);
+        const recentCandles = cleanCandles.slice(-30);
         const minRecentTime = recentCandles.length > 0 ? recentCandles[0].time : 0;
         const recentPatterns = patterns.filter((p) => p.time >= minRecentTime);
 
-        const markers: SeriesMarker<UTCTimestamp>[] = recentPatterns.map((p) => {
-          const isBull = p.signal === 'bullish';
-          const isBear = p.signal === 'bearish';
+        // De-duplicate markers per timestamp to avoid collision
+        const markerTimes = new Set<number>();
+        const markers: SeriesMarker<UTCTimestamp>[] = [];
 
-          // Grüner Pfeil nach oben unter der Kerze = steigendes Muster
-          // Roter Pfeil nach unten über der Kerze = fallendes Muster
-          // Grauer Punkt = neutral (Doji)
-          // KEIN text, damit der Chart sauber bleibt!
-          return {
-            time: p.time as UTCTimestamp,
-            position: isBull ? 'belowBar' : 'aboveBar',
-            color: isBull ? '#22c55e' : isBear ? '#ef4444' : '#94a3b8',
-            shape: isBull ? 'arrowUp' : isBear ? 'arrowDown' : 'circle',
-            size: 1,
-          };
-        });
+        recentPatterns
+          .sort((a, b) => a.time - b.time)
+          .forEach((p) => {
+            if (!markerTimes.has(p.time)) {
+              markerTimes.add(p.time);
+              const isBull = p.signal === 'bullish';
+              const isBear = p.signal === 'bearish';
+              markers.push({
+                time: p.time as UTCTimestamp,
+                position: isBull ? 'belowBar' : 'aboveBar',
+                color: isBull ? '#22c55e' : isBear ? '#ef4444' : '#94a3b8',
+                shape: isBull ? 'arrowUp' : isBear ? 'arrowDown' : 'circle',
+                size: 1,
+              });
+            }
+          });
+
         markersPluginRef.current.setMarkers(markers);
       } else {
         markersPluginRef.current.setMarkers([]);
@@ -459,7 +549,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
 
     // Auto-scroll to latest candle
-    chartRef.current?.timeScale().scrollToRealTime();
+    try {
+      chartRef.current?.timeScale().scrollToRealTime();
+      if (indicators.volume && volumeChartRef.current) {
+        volumeChartRef.current.timeScale().scrollToRealTime();
+      }
+      if (indicators.rsi && rsiChartRef.current) {
+        rsiChartRef.current.timeScale().scrollToRealTime();
+      }
+    } catch {
+      // Safe guard against race condition during unmount
+    }
   }, [candles, patterns, showPatterns, indicators]);
 
   // Update active order lines (Entry, SL, TP)
@@ -467,57 +567,56 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     if (!candleSeriesRef.current) return;
 
     priceLinesRef.current.forEach((line) => {
-      candleSeriesRef.current?.removePriceLine(line);
+      try {
+        candleSeriesRef.current?.removePriceLine(line);
+      } catch {
+        // Safe guard against disposed lines
+      }
     });
     priceLinesRef.current = [];
 
     activeOrders.forEach((order) => {
       if (order.status !== 'OPEN') return;
 
-      const entryLine = candleSeriesRef.current?.createPriceLine({
-        price: order.openPrice,
-        color: order.type === 'BUY' ? '#3b82f6' : '#f97316',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
-        title: `${order.type} ${order.lotSize}L @ ${formatPrice(order.openPrice, symbol)}`,
-      });
-      if (entryLine) priceLinesRef.current.push(entryLine);
-
-      if (order.sl) {
-        const slLine = candleSeriesRef.current?.createPriceLine({
-          price: order.sl,
-          color: '#ef4444',
+      try {
+        const entryLine = candleSeriesRef.current?.createPriceLine({
+          price: order.openPrice,
+          color: order.type === 'BUY' ? '#3b82f6' : '#f97316',
           lineWidth: 2,
-          lineStyle: LineStyle.Dashed,
+          lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
-          title: `SL (${formatPrice(order.sl, symbol)})`,
+          title: `${order.type} ${order.lotSize}L @ ${formatPrice(order.openPrice, symbol)}`,
         });
-        if (slLine) priceLinesRef.current.push(slLine);
-      }
+        if (entryLine) priceLinesRef.current.push(entryLine);
 
-      if (order.tp) {
-        const tpLine = candleSeriesRef.current?.createPriceLine({
-          price: order.tp,
-          color: '#22c55e',
-          lineWidth: 2,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `TP (${formatPrice(order.tp, symbol)})`,
-        });
-        if (tpLine) priceLinesRef.current.push(tpLine);
+        if (order.sl) {
+          const slLine = candleSeriesRef.current?.createPriceLine({
+            price: order.sl,
+            color: '#ef4444',
+            lineWidth: 2,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `SL (${formatPrice(order.sl, symbol)})`,
+          });
+          if (slLine) priceLinesRef.current.push(slLine);
+        }
+
+        if (order.tp) {
+          const tpLine = candleSeriesRef.current?.createPriceLine({
+            price: order.tp,
+            color: '#22c55e',
+            lineWidth: 2,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `TP (${formatPrice(order.tp, symbol)})`,
+          });
+          if (tpLine) priceLinesRef.current.push(tpLine);
+        }
+      } catch {
+        // Ignore price line creation error if series is updating
       }
     });
   }, [activeOrders, symbol]);
-
-  // Adjust chart height when RSI toggles
-  useEffect(() => {
-    if (chartRef.current) {
-      chartRef.current.applyOptions({
-        height: indicators.rsi ? height - 130 : height,
-      });
-    }
-  }, [indicators.rsi, height]);
 
   const activeCandle = hoveredCandle || candles[candles.length - 1];
   const isUp = activeCandle ? activeCandle.close >= activeCandle.open : true;
@@ -526,6 +625,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     : '0.0';
 
   const displayedPattern = hoveredPattern || pinnedPattern;
+  const hoveredVolume = activeCandle ? Math.round(activeCandle.volume || 0) : null;
 
   return (
     <div className="flex flex-col w-full bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl relative">
@@ -564,16 +664,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             {indicators.sma20 && <span className="text-sky-400">SMA 20</span>}
             {indicators.sma50 && <span className="text-amber-400">SMA 50</span>}
             {indicators.sma200 && <span className="text-purple-400">SMA 200</span>}
+            {indicators.volume && <span className="text-sky-300">Volumen</span>}
             {indicators.rsi && <span className="text-rose-400">RSI 14</span>}
           </div>
         </div>
       </div>
 
-      {/* Main Candlestick Chart Area */}
+      {/* Main Candlestick Chart Area (Clean without overlapping volume bars) */}
       <div className="relative w-full">
         <div ref={chartContainerRef} className="w-full relative cursor-crosshair" />
 
-        {/* REQUIREMENT 2: Interactive Floating Tooltip when hovering/clicking on a marker */}
+        {/* Interactive Floating Tooltip when hovering/clicking on a marker */}
         {displayedPattern && showPatterns && (
           <div className="absolute top-3 left-3 z-30 max-w-sm bg-slate-900/95 border border-slate-700/90 shadow-2xl rounded-xl p-3.5 backdrop-blur-md animate-in fade-in duration-200">
             <div className="flex items-start justify-between gap-3 mb-1.5">
@@ -630,6 +731,28 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           </div>
         )}
       </div>
+
+      {/* REQUIREMENT 1: Dedicated Volume Sub-Chart pane (ca. 20% height, whole integer values) */}
+      {indicators.volume && (
+        <div className="w-full border-t border-slate-800/80 bg-slate-950/90">
+          <div className="px-4 py-1 text-[11px] font-mono text-slate-400 border-b border-slate-800/40 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
+              <span>Volumen (Handelsaktivität)</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {hoveredVolume !== null ? (
+                <span>
+                  Vol: <strong className="text-white font-bold">{hoveredVolume.toLocaleString('de-DE')}</strong> Kontrakte
+                </span>
+              ) : (
+                'Ganze Zahl ohne Nachkommastellen'
+              )}
+            </span>
+          </div>
+          <div ref={volumeContainerRef} className="w-full" />
+        </div>
+      )}
 
       {/* RSI Sub-pane */}
       {indicators.rsi && (

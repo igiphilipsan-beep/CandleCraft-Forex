@@ -17,6 +17,16 @@ export const QuizView: React.FC<QuizViewProps> = ({ progress, onUpdateProgress }
   const [isRevealed, setIsRevealed] = useState(false);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showHint, setShowHint] = useState(false);
+  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   const scenario: QuizScenario = QUIZ_SCENARIOS[currentScenarioIndex] || QUIZ_SCENARIOS[0];
 
@@ -35,13 +45,20 @@ export const QuizView: React.FC<QuizViewProps> = ({ progress, onUpdateProgress }
     setUserChoice(choice);
     const isCorrect = choice === scenario.correctDirection;
 
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
     // Trigger reveal sequence of the 10 candles
     let count = 0;
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       count++;
       setRevealedCount(count);
       if (count >= scenario.revealCandles.length) {
-        clearInterval(interval);
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
         setIsRevealed(true);
 
         if (isCorrect) {
@@ -79,6 +96,10 @@ export const QuizView: React.FC<QuizViewProps> = ({ progress, onUpdateProgress }
   };
 
   const handleNextScenario = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     setUserChoice(null);
     setIsRevealed(false);
     setRevealedCount(0);

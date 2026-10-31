@@ -11,7 +11,8 @@ export function getPipFactor(symbol: ForexSymbol): number {
 /**
  * Format price according to symbol decimals
  */
-export function formatPrice(price: number, symbol: ForexSymbol): string {
+export function formatPrice(price: number | undefined | null, symbol: ForexSymbol): string {
+  if (typeof price !== 'number' || isNaN(price)) return '0.00000';
   const decimals = FOREX_PAIRS[symbol]?.decimals ?? 5;
   return price.toFixed(decimals);
 }
@@ -20,6 +21,9 @@ export function formatPrice(price: number, symbol: ForexSymbol): string {
  * Calculate difference in pips between two prices
  */
 export function calculatePipsDiff(entryPrice: number, currentPrice: number, type: 'BUY' | 'SELL', symbol: ForexSymbol): number {
+  if (typeof entryPrice !== 'number' || typeof currentPrice !== 'number' || isNaN(entryPrice) || isNaN(currentPrice)) {
+    return 0;
+  }
   const pipFactor = getPipFactor(symbol);
   const rawDiff = type === 'BUY' ? (currentPrice - entryPrice) : (entryPrice - currentPrice);
   return Number((rawDiff / pipFactor).toFixed(1));
@@ -59,13 +63,14 @@ export function calculateTradePnL(
 /**
  * Get current Bid and Ask prices given a candle close and the symbol's spread
  */
-export function getBidAsk(closePrice: number, symbol: ForexSymbol, customSpreadPips?: number): { bid: number; ask: number; spreadPips: number } {
+export function getBidAsk(closePrice: number | undefined | null, symbol: ForexSymbol, customSpreadPips?: number): { bid: number; ask: number; spreadPips: number } {
+  const safePrice = (typeof closePrice === 'number' && !isNaN(closePrice)) ? closePrice : 1.085;
   const spreadPips = customSpreadPips ?? (FOREX_PAIRS[symbol]?.defaultSpreadPips ?? 1.2);
   const pipFactor = getPipFactor(symbol);
   const halfSpread = (spreadPips / 2) * pipFactor;
 
-  const bid = Number((closePrice - halfSpread).toFixed(FOREX_PAIRS[symbol]?.decimals ?? 5));
-  const ask = Number((closePrice + halfSpread).toFixed(FOREX_PAIRS[symbol]?.decimals ?? 5));
+  const bid = Number((safePrice - halfSpread).toFixed(FOREX_PAIRS[symbol]?.decimals ?? 5));
+  const ask = Number((safePrice + halfSpread).toFixed(FOREX_PAIRS[symbol]?.decimals ?? 5));
 
   return { bid, ask, spreadPips };
 }

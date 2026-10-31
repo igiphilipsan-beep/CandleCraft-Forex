@@ -69,28 +69,32 @@ app.get('/api/forex/candles', async (req, res) => {
     const volumes = quote.volume || [];
 
     const candles = [];
+    let lastTime = 0;
     for (let i = 0; i < timestamps.length; i++) {
+      const t = Math.floor(timestamps[i]);
       const o = opens[i];
       const h = highs[i];
       const l = lows[i];
       const c = closes[i];
       const v = volumes[i] ?? 1000;
 
-      // Filter out null / NaN / zero anomalies
+      // Filter out null / NaN / zero anomalies and ensure strictly ascending timestamps
       if (
+        t > lastTime &&
         typeof o === 'number' && !isNaN(o) &&
         typeof h === 'number' && !isNaN(h) &&
         typeof l === 'number' && !isNaN(l) &&
         typeof c === 'number' && !isNaN(c) &&
         o > 0 && h > 0 && l > 0 && c > 0
       ) {
+        lastTime = t;
         candles.push({
-          time: timestamps[i],
+          time: t,
           open: Number(o.toFixed(symbol.includes('JPY') ? 3 : 5)),
           high: Number(h.toFixed(symbol.includes('JPY') ? 3 : 5)),
           low: Number(l.toFixed(symbol.includes('JPY') ? 3 : 5)),
           close: Number(c.toFixed(symbol.includes('JPY') ? 3 : 5)),
-          volume: Math.round(v) || Math.floor(500 + Math.random() * 2000),
+          volume: Math.round(Number(v)) || Math.floor(500 + Math.random() * 2000),
         });
       }
     }
